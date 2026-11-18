@@ -12,6 +12,12 @@ import { loadDeckSymbols } from './assets-loader.js';
 import { CardRenderer } from './card-renderer.js';
 import { t } from './translations.js';
 
+// Раскладка поля: высота подписи под картой, доля ячейки под карту, границы размера карты (px)
+const LABEL_HEIGHT = 34;
+const CELL_FILL = 0.9;
+const MAX_CARD_SIZE = 520;
+const MIN_CARD_SIZE = 64;
+
 export class Game {
   constructor(config) {
     this.config = config;
@@ -44,6 +50,13 @@ export class Game {
     this.board = null;
     this.renderer = new CardRenderer();
     this.eventHandlers = new Map();
+    // Колбэк конца игры: main.js показывает экран результатов
+    this.onGameOver = config.onGameOver || null;
+    // После destroy() отложенные таймеры ничего не должны делать
+    this.isDestroyed = false;
+    this.elapsedInterval = null;
+    this.resizeObserver = null;
+    this.lastBoardSize = null;
   }
 
   async init(boardElement) {
@@ -77,6 +90,8 @@ export class Game {
 
     this.renderBoard();
     this.updateCardsRemaining();
+    this.watchBoardSize();
+    this.startElapsedTimer();
 
     // Показуємо таймер або панель гравців
     if (this.config.players === 1) {
@@ -205,46 +220,138 @@ export class Game {
   renderBoard() {
     this.board.innerHTML = '';
 
-    // Рендеримо карти залежно від кількості гравців
-    if (this.config.players === 1) {
-      this.renderOnePlayerLayout();
-    } else if (this.config.players === 2) {
-      this.renderTwoPlayersLayout();
-    } else {
-      this.renderCentralCard();
-      this.renderPlayerCards();
+    const layout = this.computeLayout();
+    this.lastBoardSize = { w: layout.boardW, h: layout.boardH };
+
+    layout.slots.forEach(slot => {
+      if (slot.type === 'deck') {
+        this.renderCentralCardAt(slot.x, slot.y, layout.size);
+      } else {
+        this.renderPlayerCardAt(slot.index, slot.x, slot.y, layout.size);
+      }
+    });
+
+    // После перерисовки (например, при повороте телефона) возвращаем подсветку выбранной карты
+    const selected = this.state.roundState.selectedPlayerCard;
+    if (selected !== null) this.highlightPlayerCard(selected, true);
+  }
+
+  /**
+   * Варианты раскладки поля: сетка cols × rows, в ячейках — колода и карты игроков.
+   * col/row — центр карты в долях ячеек (0.5 = середина первой ячейки,
+   * 1 = граница между первой и второй — так колода встаёт по центру двух ячеек).
+   * Горизонтальная раскладка — для широкого поля, вертикальная — для телефона.
+   */
+  getLayoutVariants() {
+    switch (this.config.players) {
+      case 1:
+        return [
+          // Гравець — Колода в ряд
+          { cols: 2, rows: 1, slots: [{ type: 'player', index: 0, col: 0.5, row: 0.5 }, { type: 'deck', col: 1.5, row: 0.5 }] },
+          // Колода сверху, игрок снизу
+          { cols: 1, rows: 2, slots: [{ type: 'deck', col: 0.5, row: 0.5 }, { type: 'player', index: 0, col: 0.5, row: 1.5 }] }
+        ];
+      case 2:
+        return [
+          // Гравець 1 — Колода — Гравець 2
+          { cols: 3, rows: 1, slots: [{ type: 'player', index: 0, col: 0.5, row: 0.5 }, { type: 'deck', col: 1.5, row: 0.5 }, { type: 'player', index: 1, col: 2.5, row: 0.5 }] },
+          // Столбиком
+          { cols: 1, rows: 3, slots: [{ type: 'player', index: 0, col: 0.5, row: 0.5 }, { type: 'deck', col: 0.5, row: 1.5 }, { type: 'player', index: 1, col: 0.5, row: 2.5 }] },
+          // Телефон: колода сверху, игроки рядом снизу
+          { cols: 2, rows: 2, slots: [{ type: 'deck', col: 1, row: 0.5 }, { type: 'player', index: 0, col: 0.5, row: 1.5 }, { type: 'player', index: 1, col: 1.5, row: 1.5 }] }
+        ];
+      case 3:
+        return [
+          // Колода сверху, три игрока в ряд снизу
+          { cols: 3, rows: 2, slots: [{ type: 'deck', col: 1.5, row: 0.5 }, { type: 'player', index: 0, col: 0.5, row: 1.5 }, { type: 'player', index: 1, col: 1.5, row: 1.5 }, { type: 'player', index: 2, col: 2.5, row: 1.5 }] },
+          // Колода сверху, игроки 1-2 в ряд, игрок 3 снизу по центру
+          { cols: 2, rows: 3, slots: [{ type: 'deck', col: 1, row: 0.5 }, { type: 'player', index: 0, col: 0.5, row: 1.5 }, { type: 'player', index: 1, col: 1.5, row: 1.5 }, { type: 'player', index: 2, col: 1, row: 2.5 }] },
+          // Телефон: сетка 2×2, колода в левом верхнем углу
+          { cols: 2, rows: 2, slots: [{ type: 'deck', col: 0.5, row: 0.5 }, { type: 'player', index: 0, col: 1.5, row: 0.5 }, { type: 'player', index: 1, col: 0.5, row: 1.5 }, { type: 'player', index: 2, col: 1.5, row: 1.5 }] },
+          // Низкий широкий экран (телефон горизонтально): все в один ряд, колода второй
+          { cols: 4, rows: 1, slots: [{ type: 'player', index: 0, col: 0.5, row: 0.5 }, { type: 'deck', col: 1.5, row: 0.5 }, { type: 'player', index: 1, col: 2.5, row: 0.5 }, { type: 'player', index: 2, col: 3.5, row: 0.5 }] }
+        ];
+      case 4:
+      default:
+        return [
+          // Игроки по углам, колода в центре
+          { cols: 3, rows: 2, slots: [{ type: 'player', index: 0, col: 0.5, row: 0.5 }, { type: 'player', index: 1, col: 0.5, row: 1.5 }, { type: 'deck', col: 1.5, row: 1 }, { type: 'player', index: 2, col: 2.5, row: 0.5 }, { type: 'player', index: 3, col: 2.5, row: 1.5 }] },
+          // Телефон: игроки 1-3 сверху, колода в центре, игроки 2-4 снизу
+          { cols: 2, rows: 3, slots: [{ type: 'player', index: 0, col: 0.5, row: 0.5 }, { type: 'player', index: 2, col: 1.5, row: 0.5 }, { type: 'deck', col: 1, row: 1.5 }, { type: 'player', index: 1, col: 0.5, row: 2.5 }, { type: 'player', index: 3, col: 1.5, row: 2.5 }] },
+          // Низкий широкий экран (телефон горизонтально): все в один ряд, колода по центру
+          { cols: 5, rows: 1, slots: [{ type: 'player', index: 0, col: 0.5, row: 0.5 }, { type: 'player', index: 1, col: 1.5, row: 0.5 }, { type: 'deck', col: 2.5, row: 0.5 }, { type: 'player', index: 2, col: 3.5, row: 0.5 }, { type: 'player', index: 3, col: 4.5, row: 0.5 }] }
+        ];
     }
   }
 
   /**
-   * НОВЕ: Layout для 1 гравця
-   * Гравець - Центр (в ряд, однаковий розмір)
+   * Выбор раскладки и размера карт по реальному размеру поля:
+   * берём вариант, где карты получаются крупнее, и считаем размер так,
+   * чтобы карта с подписью целиком помещалась в свою ячейку — без наложений.
    */
-  renderOnePlayerLayout() {
-    const cardSize = this.calculateCardSize();
+  computeLayout() {
+    const boardW = this.board.clientWidth || window.innerWidth;
+    const boardH = this.board.clientHeight || (window.innerHeight - 70);
+    const labelH = LABEL_HEIGHT;
 
-    // Гравець (ліворуч)
-    this.renderPlayerCardAt(0, 35, 50, cardSize);
+    let best = null;
+    this.getLayoutVariants().forEach(variant => {
+      const cellW = boardW / variant.cols;
+      const cellH = boardH / variant.rows;
+      const size = Math.min(cellW * CELL_FILL, (cellH - labelH) * CELL_FILL, MAX_CARD_SIZE);
+      if (!best || size > best.size) best = { variant, cellW, cellH, size };
+    });
 
-    // Центр (праворуч)
-    this.renderCentralCardAt(65, 50, cardSize);
+    const size = Math.max(Math.floor(best.size), MIN_CARD_SIZE);
+    // Центр карты сдвигаем вверх на половину подписи, чтобы пара «карта + подпись» стояла по центру ячейки
+    const slots = best.variant.slots.map(slot => ({
+      ...slot,
+      x: slot.col * best.cellW,
+      y: slot.row * best.cellH - labelH / 2
+    }));
+
+    return { size, slots, boardW, boardH };
   }
 
   /**
-   * Layout для 2 гравців
-   * Гравець 1 - Центр - Гравець 2 (в ряд)
+   * Перерисовка поля при изменении его размера: поворот телефона,
+   * сворачивание меню кабинета (панель меняет ширину), изменение окна.
    */
-  renderTwoPlayersLayout() {
-    const cardSize = this.calculateCardSize();
+  watchBoardSize() {
+    if (typeof ResizeObserver === 'undefined') return;
+    let frame = null;
+    this.resizeObserver = new ResizeObserver(() => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        if (this.isDestroyed || this.state.isGameOver || !this.lastBoardSize) return;
+        const w = this.board.clientWidth;
+        const h = this.board.clientHeight;
+        // Мелкие колебания (полоса прокрутки, адресная строка) не перерисовываем —
+        // иначе символы на картах прыгают
+        if (Math.abs(w - this.lastBoardSize.w) < 8 && Math.abs(h - this.lastBoardSize.h) < 8) return;
+        this.renderBoard();
+      });
+    });
+    this.resizeObserver.observe(this.board);
+  }
 
-    // Гравець 1 (ліворуч)
-    this.renderPlayerCardAt(0, 20, 50, cardSize);
+  /**
+   * Общее время партии (для экрана результатов), пауза не считается
+   */
+  startElapsedTimer() {
+    this.stopElapsedTimer();
+    this.elapsedInterval = setInterval(() => {
+      if (this.state.isPaused || this.state.isGameOver) return;
+      this.state.timeElapsed++;
+    }, 1000);
+  }
 
-    // Центр (посередині)
-    this.renderCentralCardAt(50, 50, cardSize);
-
-    // Гравець 2 (праворуч)
-    this.renderPlayerCardAt(1, 80, 50, cardSize);
+  stopElapsedTimer() {
+    if (this.elapsedInterval) {
+      clearInterval(this.elapsedInterval);
+      this.elapsedInterval = null;
+    }
   }
 
   /**
@@ -255,9 +362,9 @@ export class Game {
     const container = document.createElement('div');
     container.className = 'card-container player-card';
     container.style.cssText = `
-      left: ${x}%;
-      top: ${y}%;
-      transform: translate(-50%, -50%);
+      left: ${x}px;
+      top: ${y}px;
+      transform: translate(-50%, -${size / 2}px);
     `;
 
     const cardDiv = document.createElement('div');
@@ -283,26 +390,9 @@ export class Game {
     
     cardDiv.appendChild(svg);
 
+    // Подпись всегда под картой: место под неё заложено в computeLayout()
     const label = document.createElement('div');
     label.className = 'card-label';
-
-    // Check if label can fit below the card (intelligent responsive positioning)
-    const boardHeight = this.board.clientHeight || (window.innerHeight - 70);
-    const cardBottomPos = (y / 100) * boardHeight + (size / 2);
-    const labelHeight = 35; // approximate label height with padding
-    const minSpacing = 3;
-    const availableSpace = boardHeight - cardBottomPos;
-
-    // If not enough vertical space, position label on the side
-    if (availableSpace < labelHeight + minSpacing) {
-      // Position label to the left for left-side cards (x < 50%), right for right-side cards
-      if (x < 50) {
-        label.classList.add('vertical-left');
-      } else {
-        label.classList.add('vertical-right');
-      }
-    }
-
     label.style.color = playerColor;
     label.textContent = this.state.scores[index].name;
 
@@ -318,9 +408,9 @@ export class Game {
     const container = document.createElement('div');
     container.className = 'card-container central-card';
     container.style.cssText = `
-      left: ${x}%;
-      top: ${y}%;
-      transform: translate(-50%, -50%);
+      left: ${x}px;
+      top: ${y}px;
+      transform: translate(-50%, -${size / 2}px);
     `;
 
     const cardDiv = document.createElement('div');
@@ -349,184 +439,6 @@ export class Game {
     container.appendChild(cardDiv);
     container.appendChild(label);
     this.board.appendChild(container);
-  }
-
-  /**
-   * Стандартний рендер центральної карти (для 3-4 гравців)
-   */
-  renderCentralCard() {
-    const cardSize = this.calculateCardSize();
-    const container = document.createElement('div');
-    container.className = 'card-container central-card';
-
-    if (this.config.players === 3) {
-      container.style.cssText = `
-        left: 50%;
-        top: 28%;
-        transform: translate(-50%, -50%);
-      `;
-    } else if (this.config.players === 4) {
-      container.style.cssText = `
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-      `;
-    }
-
-    const cardDiv = document.createElement('div');
-    cardDiv.className = 'card central';
-    cardDiv.dataset.cardType = 'central';
-    cardDiv.style.cssText = `
-      width: ${cardSize}px;
-      height: ${cardSize}px;
-    `;
-
-    const svg = this.renderer.render(
-      this.state.currentCentralCard,
-      this.assets,
-      {
-        size: cardSize,
-        onSymbolClick: (symbolId) => this.handleCentralCardClick(symbolId)
-      }
-    );
-
-    cardDiv.appendChild(svg);
-
-    const label = document.createElement('div');
-    label.className = 'card-label';
-    label.textContent = `${t('deck', this.lang)} (${this.state.deck.length})`;
-
-    container.appendChild(cardDiv);
-    container.appendChild(label);
-    this.board.appendChild(container);
-  }
-
-  /**
-   * Рендер карт гравців (для 3-4 гравців)
-   */
-  renderPlayerCards() {
-    const positions = this.getPlayerPositions();
-    const cardSize = this.calculateCardSize();
-
-    this.state.playerCards.forEach((card, index) => {
-      const container = document.createElement('div');
-      container.className = 'card-container player-card';
-      container.style.cssText = `
-        left: ${positions[index].x}%;
-        top: ${positions[index].y}%;
-        transform: translate(-50%, -50%);
-      `;
-
-      const cardDiv = document.createElement('div');
-      cardDiv.className = 'card player';
-      cardDiv.dataset.playerId = index + 1;
-      cardDiv.dataset.playerIndex = index;
-      cardDiv.style.cssText = `
-        width: ${cardSize}px;
-        height: ${cardSize}px;
-      `;
-
-      const playerColor = this.state.scores[index].color;
-      cardDiv.style.boxShadow = `0 0 0 4px ${playerColor}40`;
-
-      const svg = this.renderer.render(
-        card,
-        this.assets,
-        {
-          size: cardSize,
-          onSymbolClick: (symbolId) => this.handlePlayerCardClick(index, symbolId)
-        }
-      );
-
-      cardDiv.appendChild(svg);
-
-      const label = document.createElement('div');
-      label.className = 'card-label';
-
-      // Check if label can fit below the card (intelligent responsive positioning)
-      const boardHeight = this.board.clientHeight || (window.innerHeight - 70);
-      const cardBottomPos = (positions[index].y / 100) * boardHeight + (cardSize / 2);
-      const labelHeight = 35; // approximate label height with padding
-      const minSpacing = 3;
-      const availableSpace = boardHeight - cardBottomPos;
-
-      // If not enough vertical space, position label on the side
-      if (availableSpace < labelHeight + minSpacing) {
-        // Position label to the left for left-side cards (x < 50%), right for right-side cards
-        if (positions[index].x < 50) {
-          label.classList.add('vertical-left');
-        } else {
-          label.classList.add('vertical-right');
-        }
-      }
-
-      label.style.color = playerColor;
-      label.textContent = this.state.scores[index].name;
-
-      container.appendChild(cardDiv);
-      container.appendChild(label);
-      this.board.appendChild(container);
-    });
-  }
-
-  /**
-   * Розташування для 3-4 гравців
-   */
-  getPlayerPositions() {
-    const numPlayers = this.config.players;
-
-    if (numPlayers === 3) {
-      return [
-        { x: 20, y: 72 },
-        { x: 50, y: 72 },
-        { x: 80, y: 72 }
-      ];
-    }
-
-    if (numPlayers === 4) {
-      return [
-        { x: 20, y: 28 },
-        { x: 20, y: 72 },
-        { x: 80, y: 28 },
-        { x: 80, y: 72 }
-      ];
-    }
-
-    return [];
-  }
-
-  /**
-   * Calculate card size based on number of players and viewport
-   */
-  calculateCardSize() {
-    const board = this.board;
-    const boardWidth = board.clientWidth || window.innerWidth;
-    const boardHeight = board.clientHeight || (window.innerHeight - 70);
-
-    let cardSize;
-
-    switch (this.config.players) {
-      case 1:
-        // Two cards side by side
-        cardSize = Math.min(boardWidth * 0.35, boardHeight * 0.7, 320);
-        break;
-      case 2:
-        // Three cards in a row
-        cardSize = Math.min(boardWidth * 0.28, boardHeight * 0.65, 280);
-        break;
-      case 3:
-        // Deck on top, 3 players below
-        cardSize = Math.min(boardWidth * 0.28, boardHeight * 0.42, 240);
-        break;
-      case 4:
-        // Deck in center, 4 players in corners
-        cardSize = Math.min(boardWidth * 0.28, boardHeight * 0.38, 220);
-        break;
-      default:
-        cardSize = 280;
-    }
-
-    return Math.max(cardSize, 120); // Reduced minimum size for mobile
   }
 
   /**
@@ -708,6 +620,7 @@ export class Game {
     this.animateCardTransfer(playerIndex);
 
     setTimeout(() => {
+      if (this.isDestroyed) return;
       this.resetRoundState();
       this.renderBoard();
       if (this.config.players > 1) {
@@ -778,31 +691,29 @@ export class Game {
 
     console.log(`🏆 Гра закінчена! Переможець: Гравець ${winner.playerId} з ${winner.cards} картами`);
 
+    this.stopTimer();
+    this.stopElapsedTimer();
+
     setTimeout(() => {
+      if (this.isDestroyed) return;
       this.showResults(winner);
     }, 500);
   }
 
+  /**
+   * Итоги партии отдаём в main.js — он показывает экран результатов
+   * (раньше здесь было отдельное окно только на украинском с перезагрузкой страницы)
+   */
   showResults(winner) {
-    const modal = document.createElement('div');
-    modal.className = 'game-over-modal';
-    modal.innerHTML = `
-      <div class="modal-content">
-        <h2>🏆 Гра закінчена!</h2>
-        <div class="winner" style="color: ${winner.color}">
-          <p class="winner-name">${winner.name}</p>
-          <p class="winner-cards">${winner.cards} карт</p>
-        </div>
-        <div class="game-stats">
-          <p>Правильних відповідей: ${this.state.correctClicks}</p>
-          <p>Помилкових: ${this.state.wrongClicks}</p>
-        </div>
-        <button class="btn-primary" onclick="location.reload()">
-          Грати знову
-        </button>
-      </div>
-    `;
-    document.body.appendChild(modal);
+    if (!this.onGameOver) return;
+    this.onGameOver({
+      players: this.config.players,
+      winner,
+      scores: this.state.scores.map(score => ({ ...score })),
+      correctClicks: this.state.correctClicks,
+      wrongClicks: this.state.wrongClicks,
+      timeElapsed: this.state.timeElapsed
+    });
   }
 
   getPlayerColor(index) {
@@ -825,8 +736,15 @@ export class Game {
   }
 
   destroy() {
+    this.isDestroyed = true;
+
     // Stop timer
     this.stopTimer();
+    this.stopElapsedTimer();
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
 
     this.eventHandlers.forEach((handler, key) => {
       const [element, event] = key.split(':');
@@ -837,7 +755,7 @@ export class Game {
 
     if (this.board) {
       this.board.innerHTML = '';
-      this.board.classList.remove('multiplayer-3', 'multiplayer-4');
+      this.board.classList.remove('multiplayer-2', 'multiplayer-3', 'multiplayer-4');
     }
   }
 }

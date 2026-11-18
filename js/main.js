@@ -6,7 +6,7 @@
 
 import { AssetsLoader } from './assets-loader.js';
 import { Game } from './game.js';
-import { translations, t, detectLanguage } from './translations.js';
+import { t } from './translations.js';
 
 // Глобальний стан додатку
 const appState = {
@@ -28,55 +28,68 @@ function updateTexts(lang) {
   console.log(`🌍 Updating texts to: ${lang}`);
   
   // Оновлюємо всі елементи з data-i18n
-  const elements = document.querySelectorAll('[data-i18n]');
-  elements.forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    const translated = t(key, lang);
-    
-    // Якщо це кнопка з HTML всередині
-    if (el.querySelector('small')) {
-      const span = el.querySelector('span[data-i18n]');
-      if (span) {
-        span.textContent = t(span.getAttribute('data-i18n'), lang);
-      }
-    } else {
-      el.textContent = translated;
-    }
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'), lang);
   });
-  
+
+  // Підказки та aria-label іконок (пауза, вихід)
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const translated = t(el.getAttribute('data-i18n-title'), lang);
+    el.title = translated;
+    el.setAttribute('aria-label', translated);
+  });
+
   appState.currentLang = lang;
+  // Гра вже йде — перекладаємо підписи на полі (імена гравців, колода), карти не перемальовуємо
+  if (appState.game) relabelGame(lang);
   console.log(`✅ Texts updated to: ${lang}`);
 }
 
+function relabelGame(lang) {
+  const game = appState.game;
+  game.lang = lang;
+  game.state.scores.forEach(score => {
+    score.name = `${t('player', lang)} ${score.playerIndex + 1}`;
+  });
+  document.querySelectorAll('.card.player').forEach(card => {
+    const score = game.state.scores[Number(card.dataset.playerIndex)];
+    const label = card.parentNode.querySelector('.card-label');
+    if (score && label) label.textContent = score.name;
+  });
+  const deck = document.querySelector('.card.central');
+  const deckLabel = deck && deck.parentNode.querySelector('.card-label');
+  if (deckLabel) deckLabel.textContent = `${t('deck', lang)} (${game.state.deck.length})`;
+  document.querySelectorAll('.player-score-top').forEach(el => {
+    const score = game.state.scores[Number(el.id.replace('player-score-', ''))];
+    const name = el.querySelector('.player-name-top');
+    if (score && name && name.firstChild) name.firstChild.textContent = score.name;
+  });
+}
+
 /**
- * Ініціалізація системи мов
+ * Мови: шапку з кнопками UA / EN / RU / ES малює спільна оболонка MWShell.
+ * Вона ж обирає мову (?lang= → збережений вибір → мова браузера → українська)
+ * і ставить <html lang> та заголовок вкладки.
  */
 function initLanguages() {
-  console.log('🌍 Initializing languages...');
-  
-  const detectedLang = detectLanguage();
-  appState.currentLang = detectedLang;
-  console.log(`📍 Detected language: ${detectedLang}`);
-  
-  const langButtons = document.querySelectorAll('.lang-btn');
-  langButtons.forEach(btn => {
-    const btnLang = btn.getAttribute('data-lang');
-    if (btnLang === detectedLang) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
-    
-    btn.addEventListener('click', () => {
-      langButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const newLang = btn.getAttribute('data-lang');
-      updateTexts(newLang);
-    });
+  window.MWShell.init({
+    mount: '#mw-header',
+    title: { uk: 'Знайди першим', en: 'Find it First', ru: 'Найди первым', es: 'Encuéntralo primero' },
+    tagline: {
+      uk: 'Гра на увагу та швидкість реакції',
+      en: 'A game for attention and quick reactions',
+      ru: 'Игра на внимание и скорость реакции',
+      es: 'Un juego de atención y reacción rápida'
+    },
+    docTitle: {
+      uk: 'Знайди першим — MindWorld School',
+      en: 'Find it First — MindWorld School',
+      ru: 'Найди первым — MindWorld School',
+      es: 'Encuéntralo primero — MindWorld School'
+    },
+    ukrainianCode: 'ua',
+    onLangChange: updateTexts
   });
-  
-  updateTexts(detectedLang);
-  console.log('✅ Languages initialized');
 }
 
 /**
@@ -95,6 +108,9 @@ async function init() {
     // Ініціалізуємо меню
     initMenu();
     
+    // Кнопки паузи/виходу — один раз (раніше навішувались заново при кожному старті гри)
+    initGameControls();
+
     // Показуємо меню
     showScreen('menu');
     
@@ -206,6 +222,7 @@ async function startGame() {
   try {
     // Показуємо екран гри
     showScreen('game');
+    fitGameScreen();
     
     // Створюємо нову гру
     const gameBoard = document.getElementById('game-board');
@@ -224,14 +241,17 @@ async function startGame() {
       difficulty: appState.config.difficulty,
       moveTime: appState.config.moveTime,
       assets: appState.assets,
-      lang: appState.currentLang
+      lang: appState.currentLang,
+      onGameOver: showResults
     });
     
     // Ініціалізуємо гру
     await appState.game.init(gameBoard);
-    
-    // Ініціалізуємо кнопки управління
-    initGameControls();
+
+    // Поле гри — цілком на екран (на сайті прокручує сторінку блок Tilda)
+    if (window.MWShell && window.MWShell.reveal) {
+      setTimeout(() => window.MWShell.reveal(document.getElementById('game-screen')), 100);
+    }
     
     console.log('✅ Game started');
   } catch (error) {
@@ -385,11 +405,119 @@ function showScreen(screenName) {
 }
 
 /**
+ * Висота екрана гри.
+ * Окремо (без фрейму) — висота вікна мінус шапка.
+ * У фреймі на сайті 100vh — це висота самого фрейму, а фрейм підлаштовується
+ * під вміст: висота росла б сама від себе. Тому беремо висоту екрана пристрою
+ * мінус місце під панелі браузера, у межах 420–780 px.
+ */
+function fitGameScreen() {
+  const screenEl = document.getElementById('game-screen');
+  if (!screenEl) return;
+  if (window.parent === window) {
+    // Без фрейму: вікно мінус шапка, щоб і шапка, і поле були видні без прокрутки
+    const header = document.querySelector('.app-header');
+    const headerH = header ? header.offsetHeight : 0;
+    screenEl.style.height = Math.max(420, window.innerHeight - headerH) + 'px';
+    return;
+  }
+  // На iPhone screen.width/height не міняються при повороті — орієнтацію беремо окремо
+  const sw = window.screen.width || 800, sh = window.screen.availHeight || window.screen.height || 800;
+  const landscape = window.screen.orientation
+    ? String(window.screen.orientation.type).indexOf('landscape') === 0
+    : Math.abs(window.orientation || 0) === 90;
+  const deviceH = landscape ? Math.min(sw, sh) : Math.max(sw, sh);
+  const h = Math.max(420, Math.min(780, deviceH - 200));
+  screenEl.style.height = h + 'px';
+}
+
+// Поворот телефона / зміна вікна — перерахувати, поки йде гра
+function refitGameScreen() {
+  if (appState.currentScreen === 'game') fitGameScreen();
+}
+window.addEventListener('orientationchange', () => setTimeout(refitGameScreen, 300));
+window.addEventListener('resize', () => {
+  if (window.parent === window) refitGameScreen();
+});
+
+/**
  * Показати помилку
  */
 function showError(message) {
   console.error('❌ Error:', message);
   alert(message);
+}
+
+/**
+ * Формат часу м:сс
+ */
+function formatTime(totalSeconds) {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Екран результатів (замість окремого вікна з перезавантаженням сторінки)
+ */
+function showResults(result) {
+  const lang = appState.currentLang;
+  const soloBlock = document.getElementById('solo-results');
+  const multiBlock = document.getElementById('multi-results');
+
+  if (result.players === 1) {
+    const total = result.correctClicks + result.wrongClicks;
+    const accuracy = total > 0 ? Math.round((result.correctClicks / total) * 100) : 100;
+    document.getElementById('solo-cards').textContent = result.correctClicks;
+    document.getElementById('solo-time').textContent = formatTime(result.timeElapsed);
+    document.getElementById('solo-accuracy').textContent = `${accuracy}%`;
+    soloBlock.classList.remove('hidden');
+    multiBlock.classList.add('hidden');
+  } else {
+    // Місця за кількістю карт; однакова кількість — однакове місце
+    const ranked = [...result.scores].sort((a, b) => b.cards - a.cards);
+    const best = ranked[0].cards;
+    const leaders = ranked.filter(score => score.cards === best);
+    const winnerLine = document.getElementById('winner-line');
+    winnerLine.textContent = leaders.length > 1
+      ? t('draw', lang)
+      : `🏆 ${t('winner', lang)}: ${leaders[0].name}`;
+    winnerLine.style.color = leaders.length > 1 ? '' : leaders[0].color;
+
+    const podium = document.getElementById('winners-podium');
+    podium.innerHTML = '';
+    const medals = ['🥇', '🥈', '🥉'];
+    let place = 0;
+    ranked.forEach((score, i) => {
+      if (i === 0 || score.cards !== ranked[i - 1].cards) place = i;
+      const li = document.createElement('li');
+      li.className = 'podium-row' + (score.cards === best ? ' is-winner' : '');
+
+      const medal = document.createElement('span');
+      medal.className = 'podium-place';
+      medal.textContent = medals[place] || `${place + 1}`;
+
+      const dot = document.createElement('span');
+      dot.className = 'player-color-dot';
+      dot.style.background = score.color;
+
+      const name = document.createElement('span');
+      name.className = 'podium-name';
+      name.textContent = score.name;
+
+      const cards = document.createElement('b');
+      cards.className = 'podium-cards';
+      cards.textContent = `${score.cards} ${t('cardsCount', lang)}`;
+
+      li.append(medal, dot, name, cards);
+      podium.appendChild(li);
+    });
+
+    multiBlock.classList.remove('hidden');
+    soloBlock.classList.add('hidden');
+  }
+
+  showScreen('results');
 }
 
 /**
@@ -410,7 +538,7 @@ function initResults() {
   if (menuButton) {
     menuButton.addEventListener('click', () => {
       console.log('🏠 Menu clicked');
-      showScreen('menu');
+      exitGame();
     });
   }
 }
@@ -420,6 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('📄 DOM loaded');
   init();
   initResults();
+
 });
 
 // Експорт для використання в інших модулях
