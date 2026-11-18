@@ -16,6 +16,9 @@ export const translations = {
     difficultyMedium: "Середньо",
     difficultyHard: "Складно",
     cardsInfo: "карт • символів",
+    easyInfo: "13 карт • 4 символи",
+    mediumInfo: "31 карта • 6 символів",
+    hardInfo: "55 карт • 8 символів",
     startGame: "Почати гру",
     
     // Game UI
@@ -54,7 +57,13 @@ export const translations = {
 
     // Timer
     moveTime: "Час на хід",
-    timeUp: "Час вийшов!"
+    timeUp: "Час вийшов!",
+
+    // Results (2+ players)
+    findHint: "Знайди однакову картинку: натисни її на своїй картці, а потім на колоді",
+    winner: "Переможець",
+    draw: "Нічия!",
+    cardsCount: "карт"
   },
 
   en: {
@@ -69,6 +78,9 @@ export const translations = {
     difficultyMedium: "Medium",
     difficultyHard: "Hard",
     cardsInfo: "cards • symbols",
+    easyInfo: "13 cards • 4 symbols",
+    mediumInfo: "31 cards • 6 symbols",
+    hardInfo: "55 cards • 8 symbols",
     startGame: "Start Game",
     
     // Game UI
@@ -107,7 +119,13 @@ export const translations = {
 
     // Timer
     moveTime: "Move time",
-    timeUp: "Time's up!"
+    timeUp: "Time's up!",
+
+    // Results (2+ players)
+    findHint: "Find the matching picture: tap it on your card, then on the deck",
+    winner: "Winner",
+    draw: "It's a draw!",
+    cardsCount: "cards"
   },
 
   ru: {
@@ -122,6 +140,9 @@ export const translations = {
     difficultyMedium: "Средне",
     difficultyHard: "Сложно",
     cardsInfo: "карт • символов",
+    easyInfo: "13 карт • 4 символа",
+    mediumInfo: "31 карта • 6 символов",
+    hardInfo: "55 карт • 8 символов",
     startGame: "Начать игру",
     
     // Game UI
@@ -160,7 +181,13 @@ export const translations = {
 
     // Timer
     moveTime: "Время на ход",
-    timeUp: "Время вышло!"
+    timeUp: "Время вышло!",
+
+    // Results (2+ players)
+    findHint: "Найди одинаковую картинку: нажми её на своей карточке, а потом на колоде",
+    winner: "Победитель",
+    draw: "Ничья!",
+    cardsCount: "карт"
   },
 
   es: {
@@ -175,6 +202,9 @@ export const translations = {
     difficultyMedium: "Medio",
     difficultyHard: "Difícil",
     cardsInfo: "cartas • símbolos",
+    easyInfo: "13 cartas • 4 símbolos",
+    mediumInfo: "31 cartas • 6 símbolos",
+    hardInfo: "55 cartas • 8 símbolos",
     startGame: "Comenzar Juego",
     
     // Game UI
@@ -213,7 +243,13 @@ export const translations = {
 
     // Timer
     moveTime: "Tiempo por turno",
-    timeUp: "¡Se acabó el tiempo!"
+    timeUp: "¡Se acabó el tiempo!",
+
+    // Results (2+ players)
+    findHint: "Encuentra la imagen igual: tócala en tu carta y luego en el mazo",
+    winner: "Ganador",
+    draw: "¡Empate!",
+    cardsCount: "cartas"
   }
 };
 

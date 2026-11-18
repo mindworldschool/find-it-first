@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uk">
 <head>
   <meta name="robots" content="noindex">
   <!-- Google tag (gtag.js) -->
@@ -15,13 +15,20 @@
 </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Find it First - MindWorld School</title>
-  <link rel="stylesheet" href="css/styles.css">
+  <title>Знайди першим — MindWorld School</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Жирный Baloo 2 для цифр (счёт, таймер); остальные шрифты даёт оболочка -->
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
+  <!-- Общая оболочка публичных тренажёров: шапка, языки, шрифты, цвета -->
+  <link rel="stylesheet" href="/trainer-shell/shell.v1.css">
+  <link rel="stylesheet" href="css/styles.css?v=1">
+  <script src="/trainer-shell/shell.v1.js"></script>
 </head>
 <body>
+  <!-- Сюда оболочка вставит шапку (лого, название, UA / EN / RU / ES) -->
+  <div id="mw-header"></div>
+
   <!-- Экран загрузки -->
   <div id="loading-screen" class="screen">
     <div class="loading-content">
@@ -30,64 +37,49 @@
     </div>
   </div>
 
-  <!-- Главное меню -->
+  <!-- Главное меню (настройки) -->
   <div id="menu-screen" class="screen hidden">
-    <header class="game-header">
-      <div class="header-logo">
-        <img src="images/logo.png" alt="MindWorld School" class="logo-img">
-      </div>
-      <div class="header-center">
-        <h1 class="game-title" data-i18n="gameTitle">Find it First</h1>
-        <p class="game-subtitle" data-i18n="gameSubtitle">MindWorld School</p>
-      </div>
-      <div class="header-lang">
-        <div class="lang-capsule">
-          <button class="lang-btn active" data-lang="ua">UA</button>
-          <button class="lang-btn" data-lang="en">EN</button>
-          <button class="lang-btn" data-lang="ru">RU</button>
-          <button class="lang-btn" data-lang="es">ES</button>
-        </div>
-      </div>
-    </header>
 
-    <main class="setup-screen">
-      <div class="setup-section">
-        <h3 data-i18n="playersCount">Количество игроков</h3>
-        <div class="setup-buttons">
-          <button class="btn active" data-players="1">1</button>
-          <button class="btn" data-players="2">2</button>
-          <button class="btn" data-players="3">3</button>
-          <button class="btn" data-players="4">4</button>
+    <main class="settings-screen">
+      <div class="panel">
+        <div class="setup-section">
+          <h3 class="setup-title" data-i18n="playersCount">Кількість гравців</h3>
+          <div class="setup-buttons">
+            <button class="opt active" data-players="1">1</button>
+            <button class="opt" data-players="2">2</button>
+            <button class="opt" data-players="3">3</button>
+            <button class="opt" data-players="4">4</button>
+          </div>
         </div>
-      </div>
 
-      <div class="setup-section">
-        <h3 data-i18n="difficulty">Сложность</h3>
-        <div class="setup-buttons">
-          <button class="btn" data-difficulty="easy">
-            <span data-i18n="difficultyEasy">Легко</span><br>
-            <small>13 <span data-i18n="cardsInfo">карт • 4 символа</span></small>
-          </button>
-          <button class="btn active" data-difficulty="medium">
-            <span data-i18n="difficultyMedium">Средне</span><br>
-            <small>31 <span data-i18n="cardsInfo">карта • 6 символов</span></small>
-          </button>
-          <button class="btn" data-difficulty="hard">
-            <span data-i18n="difficultyHard">Сложно</span><br>
-            <small>55 <span data-i18n="cardsInfo">карт • 8 символов</span></small>
-          </button>
+        <div class="setup-section">
+          <h3 class="setup-title" data-i18n="difficulty">Складність</h3>
+          <div class="setup-buttons">
+            <button class="opt" data-difficulty="easy">
+              <span class="opt-name" data-i18n="difficultyEasy">Легко</span>
+              <small data-i18n="easyInfo">13 карт • 4 символи</small>
+            </button>
+            <button class="opt active" data-difficulty="medium">
+              <span class="opt-name" data-i18n="difficultyMedium">Середньо</span>
+              <small data-i18n="mediumInfo">31 карта • 6 символів</small>
+            </button>
+            <button class="opt" data-difficulty="hard">
+              <span class="opt-name" data-i18n="difficultyHard">Складно</span>
+              <small data-i18n="hardInfo">55 карт • 8 символів</small>
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div class="setup-section timer-slider-section" id="timer-section">
-        <h3 data-i18n="moveTime">Час на хід</h3>
-        <div class="timer-slider-container">
-          <input type="range" class="timer-slider" id="timer-slider" min="0" max="180" value="60" step="5">
-          <span class="timer-value" id="timer-value">1:00</span>
+        <div class="setup-section timer-slider-section" id="timer-section">
+          <h3 class="setup-title" data-i18n="moveTime">Час на хід</h3>
+          <div class="timer-slider-container">
+            <input type="range" class="timer-slider" id="timer-slider" min="0" max="180" value="60" step="5">
+            <span class="timer-value" id="timer-value">1:00</span>
+          </div>
         </div>
-      </div>
 
-      <button class="btn-primary btn-start" data-i18n="startGame">Начать игру</button>
+        <button class="btn start btn-start" data-i18n="startGame">Почати гру</button>
+      </div>
     </main>
   </div>
 
@@ -95,63 +87,60 @@
   <div id="game-screen" class="screen hidden">
     <!-- Информационная панель ВВЕРХУ -->
     <div class="game-info">
-      <!-- Ліворуч: Лічильник карт -->
+      <!-- Слева: счётчик карт -->
       <div class="info-left">
         <span class="cards-remaining"><span data-i18n="cardsRemaining">Залишилось:</span> <strong id="cards-remaining">0</strong></span>
       </div>
 
-      <!-- Посередині: Таймер (для 1 гравця) або Панель гравців (для 2-4) -->
+      <!-- По центру: таймер (1 игрок) или панель игроков (2-4) -->
       <div class="info-center">
         <span class="timer hidden" id="timer-display">⏱️ <strong>60</strong></span>
         <div class="players-scores-top hidden" id="players-scores-top">
-          <!-- Гравці додаються через JS -->
+          <!-- Игроки добавляются через JS -->
         </div>
       </div>
 
-      <!-- Праворуч: Кнопки -->
+      <!-- Справа: кнопки -->
       <div class="info-right">
         <button class="btn-icon btn-pause" aria-label="Пауза" data-i18n-title="pause">⏸</button>
         <button class="btn-icon btn-exit" aria-label="Вийти" data-i18n-title="exit">✖</button>
       </div>
     </div>
 
+    <!-- Подсказка, что делать -->
+    <p class="game-hint" data-i18n="findHint">Знайди однакову картинку: натисни її на своїй картці, а потім на колоді</p>
+
     <!-- Игровое поле -->
     <div class="game-board" id="game-board">
-      <!-- Карти додаються через JS -->
+      <!-- Карты добавляются через JS -->
     </div>
   </div>
 
   <!-- Экран результатов -->
   <div id="results-screen" class="screen hidden">
-    <div class="results-content">
-      <h2 class="results-title" data-i18n="gameOver">Гра закінчена!</h2>
+    <div class="results-screen">
+      <div class="result-card">
+        <h2 class="results-title" data-i18n="gameOver">Гра закінчена!</h2>
 
-      <!-- Результаты для 1 игрока -->
-      <div class="solo-results hidden" id="solo-results">
-        <div class="stat-card">
-          <span class="stat-label" data-i18n="collectedCards">Зібрано карт</span>
-          <span class="stat-value" id="solo-cards">0</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label" data-i18n="time">Час</span>
-          <span class="stat-value" id="solo-time">0:00</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label" data-i18n="accuracy">Точність</span>
-          <span class="stat-value" id="solo-accuracy">100%</span>
-        </div>
-      </div>
+        <!-- Результаты для 1 игрока -->
+        <ul class="result-stats solo-results hidden" id="solo-results">
+          <li><span data-i18n="collectedCards">Зібрано карт</span><b id="solo-cards">0</b></li>
+          <li><span data-i18n="time">Час</span><b id="solo-time">0:00</b></li>
+          <li><span data-i18n="accuracy">Точність</span><b id="solo-accuracy">100%</b></li>
+        </ul>
 
-      <!-- Результаты для 2+ игроков -->
-      <div class="multi-results hidden" id="multi-results">
-        <div class="winners-podium" id="winners-podium">
-          <!-- Генерируется JS -->
+        <!-- Результаты для 2+ игроков -->
+        <div class="multi-results hidden" id="multi-results">
+          <p class="winner-line" id="winner-line"></p>
+          <ol class="winners-podium" id="winners-podium">
+            <!-- Генерируется JS -->
+          </ol>
         </div>
-      </div>
 
-      <div class="results-actions">
-        <button class="btn-primary btn-play-again" data-i18n="playAgain">Грати знову</button>
-        <button class="btn-secondary btn-menu" data-i18n="toMenu">В меню</button>
+        <div class="result-actions">
+          <button class="btn start btn-play-again" data-i18n="playAgain">Грати знову</button>
+          <button class="btn ghost btn-menu" data-i18n="toMenu">В меню</button>
+        </div>
       </div>
     </div>
   </div>
@@ -160,8 +149,8 @@
   <div id="pause-modal" class="modal hidden">
     <div class="modal-content">
       <h3 data-i18n="pauseTitle">Пауза</h3>
-      <button class="btn-primary btn-resume" data-i18n="resume">Продовжити</button>
-      <button class="btn-secondary btn-exit-game" data-i18n="exitToMenu">Вийти в меню</button>
+      <button class="btn start btn-resume" data-i18n="resume">Продовжити</button>
+      <button class="btn ghost btn-exit-game" data-i18n="exitToMenu">Вийти в меню</button>
     </div>
   </div>
 
@@ -169,8 +158,8 @@
   <div id="exit-modal" class="modal hidden">
     <div class="modal-content">
       <h3 data-i18n="exitConfirmTitle">Вийти з гри?</h3>
-      <button class="btn-primary btn-exit-confirm" data-i18n="exitConfirm">Так, вийти</button>
-      <button class="btn-secondary btn-exit-cancel" data-i18n="exitCancel">Скасувати</button>
+      <button class="btn danger btn-exit-confirm" data-i18n="exitConfirm">Так, вийти</button>
+      <button class="btn ghost btn-exit-cancel" data-i18n="exitCancel">Скасувати</button>
     </div>
   </div>
 
